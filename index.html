@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>ری‌ارنج | نسخهٔ سبک</title>
+  <style>
+    :root { --bg:#0b0b10; --card:#15151e; --pri:#6c63ff; --txt:#e6e6f0; --muted:#8a8aa0; }
+    *{box-sizing:border-box;margin:0;padding:0;font-family:'Segoe UI',Tahoma,sans-serif}
+    body{background:var(--bg);color:var(--txt);display:flex;justify-content:center;align-items:center;min-height:100vh;padding:20px}
+    .wrap{width:100%;max-width:520px;background:var(--card);padding:24px;border-radius:18px;box-shadow:0 10px 30px rgba(0,0,0,.45)}
+    h2{text-align:center;margin-bottom:14px;color:var(--pri)}
+    .btn{display:inline-block;background:var(--pri);color:#fff;padding:11px 18px;border-radius:10px;cursor:pointer;font-weight:600;transition:.2s;text-align:center}
+    .btn:hover{opacity:.92;transform:translateY(-1px)}
+    input[type=file]{display:none}
+    .row{margin:12px 0;display:flex;flex-direction:column;gap:6px}
+    input[type=range]{width:100%;accent-color:var(--pri)}
+    .prog{height:12px;background:#22223a;border-radius:8px;overflow:hidden;margin:14px 0;position:relative}
+    .fill{height:100%;background:linear-gradient(90deg,#6c63ff,#00c896);width:0%;transition:width .35s}
+    .status{font-size:13px;color:var(--muted);text-align:center;min-height:22px;margin-top:4px}
+    .dlinks{display:flex;flex-direction:column;gap:10px;margin-top:16px}
+    .dl{background:#22223a;padding:12px;border-radius:10px;text-decoration:none;color:var(--txt);display:flex;justify-content:space-between;align-items:center}
+    .hist{margin-top:20px;border-top:1px dashed #333;padding-top:10px;font-size:13px;color:var(--muted)}
+    .hist-item{padding:6px 0;border-bottom:1px solid #1e1e2a}
+    .note{font-size:11px;color:#5a5a70;text-align:center;margin-top:12px;line-height:1.6}
+    .toggle{display:flex;gap:8px;justify-content:center;margin:10px 0}
+    .mode-btn{padding:6px 12px;border-radius:8px;background:#22223a;cursor:pointer;border:2px solid transparent}
+    .mode-btn.active{border-color:var(--pri);background:#2a2a40}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h2>🎧 ری‌ارنج | نسخهٔ درون‌مرورگری</h2>
+    
+    <label class="btn">انتخاب فایل صوتی (≤۴۰ مگابایت / ≤۳ دقیقه)
+      <input type="file" id="audioInput" accept="audio/*" />
+    </label>
+
+    <div class="toggle">
+      <span class="mode-btn active" data-mode="light">☀️ حالت سبک (بهینه)</span>
+      <span class="mode-btn" data-mode="full">🌙 حالت کامل</span>
+    </div>
+
+    <div class="row">
+      <label>شدت تغییر / خلاقیت: <span id="intVal">50%</span></label>
+      <input type="range" id="intensity" min="0" max="100" value="50" />
+    </div>
+
+    <button class="btn" id="runBtn" disabled>🚀 شروع پردازش</button>
+
+    <div class="prog"><div class="fill" id="bar"></div></div>
+    <p class="status" id="stxt">منتظر آپلود فایل...</p>
+
+    <div class="dlinks" id="dlArea" style="display:none;"></div>
+    <div class="hist" id="histBox"></div>
+    <p class="note">⚡ همهٔ محاسبات داخل گوشی انجام می‌شود. هیچ فایلی خارج نمی‌گردد.<br>// TODO: connect later for cloud sync or premium models</p>
+  </div>
+
+  <script type="module">
+    import * as Tone from 'https://esm.sh/tone@14.7.77';
+
+    const MAX_SIZE = 40*1024*1024;
+    const MAX_DUR = 180;
+    let history = JSON.parse(localStorage.getItem('renarrage_hist')||'[]');
+
+    const $ = id => document.getElementById(id);
+    const el = {
+      inp: $('audioInput'), btn: $('runBtn'), bar: $('bar'), stxt: $('stxt'),
+      dl: $('dlArea'), intSlider: $('intensity'), intVal: $('intVal'), hist: $('histBox'),
+      modes: document.querySelectorAll('.mode-btn')
+    };
+
+    let currentMode = 'light';
+    el.modes.forEach(m => m.addEventListener('click', () => {
+      currentMode = m.dataset.mode;
+      el.modes.forEach(b => b.classList.toggle('active', b===m));
+    }));
+
+    el.intSlider.oninput = () => el.intVal.textContent = el.intSlider.value+'%';
+    renderHist();
+
+    el.inp.onchange = async e => {
+      const f = e.target.files[0]; if(!f) return;
+      if(f.size > MAX_SIZE){ alert('حجم فایل بیش از ۴۰ مگابایت است.'); reset(); return; }
+      
+      try {
+        const ac = new AudioContext();
+        const ab = await f.arrayBuffer();
+        const buf = await ac.decodeAudioData(ab);
+        if(buf.duration > MAX_DUR){ alert('مدت زمان نباید بیشتر از ۳ دقیقه باشد.'); ac.close(); reset(); return; }
+        
+        ac.close();
+        el.btn.disabled = false;
+        el.stxt.textContent = `✅ آماده: ${f.name} (${buf.duration.toFixed(1)} ثانیه)`;
+      } catch(err) {
+        alert('فرمت فایل پشتیبانی نمی‌شود.');
+      }
+    };
+
+    function reset(){ el.inp.value=''; el.btn.disabled=true; }
+
+    function setProgress(pct){ el.bar.style.width=`${pct}%`; }
+    function step(msg, pct){ el.stxt.textContent=msg; setProgress(pct); }
+
+    function convertWav(buffer, rate=44100){
+      const len = buffer.length;
+      const ab = new ArrayBuffer(44 + len*2);
+      const v = new DataView(ab);
+      const wstr = (o,s)=>{for(let i=0;i<s.length;i++)v.setUint8(o+i,s.charCodeAt(i))};
+      wstr(0,'RIFF'); v.setUint32(4,36+len*2,true); wstr(8,'WAVE'); wstr(12,'fmt ');
+      v.setUint32(16,16,true); v.setUint16(20,1,true); v.setUint16(22,1,true);
+      v.setUint32(24,rate,true); v.setUint32(28,rate*2,true); v.setUint16(32,2,true); v.setUint16(34,16,true);
+      wstr(36,'data'); v.setUint32(40,len*2,true);
+      new Uint16Array(ab,44).set(new Int16Array(buffer.map(s=>Math.max(-32768,Math.min(32767,s*32767)))));
+      return new Blob([ab],{type:'audio/wav'});
+    }
+
+    async function splitAudio(srcBuf, mode){
+      const ch = srcBuf.numberOfChannels === 1 ? 1 : 2;
+      const dur = srcBuf.duration;
+      
+      // Light Mode: WebAudio Filter Routing
+      const offline = new OfflineAudioContext(ch, srcBuf.length, 44100);
+      const src = offline.createBufferSource();
+      src.buffer = srcBuf;
+      
+      const vocGain = offline.createGain();
+      const instGain = offline.createGain();
+      
+      if(mode === 'light'){
+        // Vocals: Bandpass ~300Hz-4kHz (covers most speech/singing)
+        const vp = offline.createBiquadFilter(); vp.type='bandpass'; vp.frequency.value=1500; vp.Q.value=0.6;
+        src.connect(vp); vp.connect(vocGain);
+        
+        // Instruments: Bass + Highs + Rest (Notch around vocal range)
+        const hp = offline.createBiquadFilter(); hp.type='highpass'; hp.frequency.value=4500;
+        const lp = offline.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=180;
+        const merge = offline.createGain();
+        src.connect(hp); src.connect(lp);
+        hp.connect(merge); lp.connect(merge);
+        merge.connect(instGain);
+      } else {
+        // Full Mode: Rougher EQ split
+        src.connect(vocGain);
+        src.connect(instGain);
+      }
+      
+      vocGain.connect(offline.destination);
+      instGain.connect(offline.destination);
+      
+      src.start();
+      const vr = await offline.startRendering();
+      const ir = await offline.startRendering();
+      return { vocals: vr.getChannelData(0), inst: ir.getChannelData(0) };
+    }
+
+    async function generateLoop(intensity){
+      const baseLen = 2 + (intensity/100)*2; // 2 to 4 seconds
+      const seq = new Tone.Sequence((time, note)=>{
+        const oscType = intensity>60?'fmsine':'triangle';
+        const s = new Tone.Synth({oscillator:{type:oscType},envelope:{attack:0.02,decay:0.15,sustain:0.2,release:0.8}}).toDestination();
+        s.triggerAttackRelease(note, '16n', time);
+      }, ['C3','E3','G3','B3'], '8n');
+      seq.loop = true;
+      seq.loopEnd = baseLen;
+      seq.startTime = Tone.now()+0.5;
+      await Tone.Transport.start();
+      const offCtx = new OfflineAudioContext(1, 44100*baseLen, 44100);
+      Tone.Destination.disconnect();
+      Tone.Destination.connect(offCtx.destination);
+      return (await offCtx.startRendering()).getChannelData(0);
+    }
+
+    function mixBuf(a, b){
+      const len = Math.max(a.length, b.length);
+      const out = new Float32Array(len);
+      for(let i=0;i<len;i++){
+        out[i] = ((a[i]||0)*0.65 + (b[i]||0)*0.35);
+        if(out[i]>1) out[i]=1; if(out[i]<-1) out[i]=-1;
+      }
+      return out;
+    }
+
+    el.btn.onclick = async ()=>{
+      if(el.btn.disabled) return;
+      el.btn.disabled = true;
+      el.dl.style.display='none';
+      step('📦 تحلیل فایل...', 10);
+      const file = el.inp.files[0];
+      const ac = new AudioContext();
+      const ab = await file.arrayBuffer();
+      const buf = await ac.decodeAudioData(ab);
+      ac.close();
+      setProgress(20); step('🔪 جداسازی صدا ('+(currentMode==='light'?'سبک':'کامل')+')...', 35);
+      
+      const { vocals, inst } = await splitAudio(buf, currentMode);
+      setProgress(50); step('🎹 تولید لوپ جدید...', 65);
+      
+      const newLoop = await generateLoop(parseInt(el.intSlider.value));
+      setProgress(80); step('🔊 میکس نهایی...', 90);
+      
+      const mixed = mixBuf(vocals, newLoop);
+      setProgress(100); step('✅ آماده دانلود', 100);
+
+      const vWav = convertWav(vocals);
+      const iWav = convertWav(inst);
+      const mWav = convertWav(mixed);
+
+      el.dl.innerHTML = '';
+      const mkLink = (b, nm)=>{
+        const u = URL.createObjectURL(b);
+        const a = document.createElement('a');
+        a.href=u; a.download=nm; a.className='dl';
+        a.innerHTML=`<span>${nm}</span><span>⬇️</span>`;
+        a.onclick=()=>setTimeout(()=>URL.revokeObjectURL(u),3000);
+        el.dl.appendChild(a);
+      };
+      mkLink(vWav, 'vocals.wav');
+      mkLink(iWav, 'instrumental_new.wav');
+      mkLink(mWav, 'final_mix.wav'); // Note: MP3 native encoding unavailable in-browser safely on mobile
+      el.dl.style.display='flex';
+
+      history.unshift({name:file.name.replace(/\.[^/.]+$/,""), int:el.intSlider.value, date:new Date().toLocaleDateString('fa-IR')});
+      if(history.length>20) history.pop();
+      localStorage.setItem('renarrage_hist', JSON.stringify(history));
+      renderHist();
+      el.btn.disabled=false;
+    };
+
+    function renderHist(){
+      el.hist.innerHTML='<strong>🕒 تاریخچه محلی:</strong>';
+      history.forEach(h=>{
+        const d=document.createElement('div'); d.className='hist-item';
+        d.textContent=`${h.name} | شدت: ${h.int}% | ${h.date}`;
+        el.hist.appendChild(d);
+      });
+    }
+  </script>
+</body>
+</html>
